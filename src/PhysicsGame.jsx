@@ -131,6 +131,7 @@ function DrivingCar({ car, paint, wheelStyle, upgrade, cameraMode, mode, careerS
 
   useEffect(() => {
     const keyDown = (event) => {
+      if (paused) return;
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault();
       if (event.repeat && event.key.toLowerCase() === 'r') return;
       if (event.key.toLowerCase() === 'w' || event.key === 'ArrowUp') input.forward = true;
@@ -153,14 +154,19 @@ function DrivingCar({ car, paint, wheelStyle, upgrade, cameraMode, mode, careerS
       if (event.key === ' ') input.handbrake = false;
       if (event.key.toLowerCase() === 'h') input.horn = false;
     };
+    const clearInput = () => {
+      Object.keys(input).forEach((key) => { input[key] = false; });
+    };
     window.addEventListener('keydown', keyDown);
     window.addEventListener('keyup', keyUp);
+    window.addEventListener('blur', clearInput);
     return () => {
       window.removeEventListener('keydown', keyDown);
       window.removeEventListener('keyup', keyUp);
-      Object.keys(input).forEach((key) => { input[key] = false; });
+      window.removeEventListener('blur', clearInput);
+      clearInput();
     };
-  }, []);
+  }, [paused]);
 
   return <RigidBody ref={body} colliders={false} position={[0, 1.2, 0]} mass={car.weight / 1000} linearDamping={0.12} angularDamping={2.2} enabledRotations={[false, true, false]} ccd onCollisionEnter={({ other }) => { if (other.rigidBodyObject?.userData?.kind === 'building') onCollision('obstacle'); }}>
     <CuboidCollider args={[0.95, 0.46, 1.8]} />

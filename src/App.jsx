@@ -557,10 +557,21 @@ function GameUI({ save, car, mode, careerStage, telemetry, timeLeft, score, warn
   const bindHold = (key) => ({
     onPointerDown: press(key, true),
     onPointerUp: press(key, false),
-    onPointerLeave: press(key, false),
     onPointerCancel: press(key, false),
-    onTouchStart: press(key, true),
-    onTouchEnd: press(key, false),
+    onLostPointerCapture: () => { input[key] = false; },
+    onKeyDown: (event) => {
+      if (event.key !== ' ' && event.key !== 'Enter') return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) input[key] = true;
+    },
+    onKeyUp: (event) => {
+      if (event.key !== ' ' && event.key !== 'Enter') return;
+      event.preventDefault();
+      event.stopPropagation();
+      input[key] = false;
+    },
+    onBlur: () => { input[key] = false; },
   });
   const steerWheel = (event) => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -569,23 +580,20 @@ function GameUI({ save, car, mode, careerStage, telemetry, timeLeft, score, warn
     input.right = !input.left;
   };
   const bindSteerWheel = {
-    onPointerDown: (event) => { event.preventDefault(); steerWheel(event); },
-    onPointerMove: (event) => { if (event.buttons || event.pressure > 0 || ('touches' in event && event.touches?.length)) steerWheel(event); },
-    onPointerUp: () => { input.left = false; input.right = false; },
-    onPointerLeave: () => { input.left = false; input.right = false; },
+    onPointerDown: (event) => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); steerWheel(event); },
+    onPointerMove: (event) => { if (event.buttons || event.pressure > 0) steerWheel(event); },
+    onPointerUp: (event) => { input.left = false; input.right = false; if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); },
     onPointerCancel: () => { input.left = false; input.right = false; },
-    onTouchStart: (event) => { event.preventDefault(); steerWheel(event); },
-    onTouchMove: (event) => { event.preventDefault(); steerWheel(event); },
-    onTouchEnd: () => { input.left = false; input.right = false; },
+    onLostPointerCapture: () => { input.left = false; input.right = false; },
   };
   useEffect(() => {
     if (paused) Object.keys(input).forEach((key) => { input[key] = false; });
   }, [paused]);
   return <motion.div className="overlay game-ui" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-    <div className="game-top"><button className="game-exit" onClick={() => setPaused(true)}><ArrowLeft size={16} /> EXIT DRIVE</button><div className="game-mission"><span className="live-dot" /><div><small>NOW DRIVING · {modeName.toUpperCase()}</small><strong>{mode === 'parking' ? 'Find the marked bay' : mode === 'trial' ? 'Reach the finish checkpoint' : mode === 'traffic' ? 'Obey signals · 50 km/h limit' : mode === 'career' ? `Career checkpoint ${careerStage + 1} of 3` : 'Explore at your own pace'}</strong></div></div><button className="pause-button" onClick={() => setPaused(true)}><Pause size={15} /> PAUSE</button></div>
+    <div className="game-top"><button className="game-exit" onClick={onExit}><ArrowLeft size={16} /> EXIT DRIVE</button><div className="game-mission"><span className="live-dot" /><div><small>NOW DRIVING · {modeName.toUpperCase()}</small><strong>{mode === 'parking' ? 'Find the marked bay' : mode === 'trial' ? 'Reach the finish checkpoint' : mode === 'traffic' ? 'Obey signals · 50 km/h limit' : mode === 'career' ? `Career checkpoint ${careerStage + 1} of 3` : 'Explore at your own pace'}</strong></div></div><button className="pause-button" onClick={() => setPaused(true)}><Pause size={15} /> PAUSE</button></div>
     <div className="game-left-hud"><div className="minimap"><div className="map-grid">{Array.from({ length: 7 }, (_, i) => <i key={i} style={{ left: `${i * 15}%` }} />)}{Array.from({ length: 7 }, (_, i) => <i key={`h${i}`} className="horizontal" style={{ top: `${i * 15}%` }} />)}<span className="map-player" style={{ left: `${50 + (telemetry.x % 18) * 1.3}%`, top: `${50 + (telemetry.z % 18) * 1.3}%` }} /><span className="map-target" /></div><span><Map size={12} /> DOWNTOWN · DISTRICT 01</span></div><div className="score-box"><small>DRIVE SCORE</small><strong>{String(score).padStart(5, '0')}</strong><span><Coins size={12} /> {save.coins.toLocaleString()} CR</span></div></div>
     <div className="game-right-hud"><button className="camera-switch" onClick={() => setCameraMode((value) => (value + 1) % 4)}><span>CAMERA VIEW</span><strong>{CAMERAS[cameraMode]}</strong><ChevronRight size={14} /></button><div className="speed-card"><div className="speed-ring"><span className="speed-value">{telemetry.speed}</span><span className="speed-unit">KM/H</span><div className="speed-scale">{Array.from({ length: 11 }, (_, i) => <i key={i} className={i < telemetry.speed / 20 ? 'lit' : ''} />)}</div></div><div className="speed-extra"><span>RPM <b>{telemetry.rpm.toLocaleString()}</b></span><span>GEAR <b>{telemetry.speed > 2 ? Math.min(6, Math.floor(telemetry.speed / 36) + 1) : 'N'}</b></span><span>FUEL <b><BatteryCharging size={14} /> 86%</b></span></div></div>{mode !== 'free' && <div className="timer-card"><small>{mode === 'parking' ? 'PARKING WINDOW' : 'TIME REMAINING'}</small><strong className={timeLeft < 20 ? 'urgent' : ''}>{timer}</strong><span>{mode === 'trial' ? 'FINISH · 0.8 KM' : mode === 'parking' ? 'PARK IN THE GREEN BAY' : 'KEEP IT CLEAN'}</span></div>}</div>
-    <div className="game-bottom"><div className="control-hint"><span>WASD</span> DRIVE <i /> <span>SPACE</span> HANDBRAKE <i /> <span>H</span> HORN <i /> <span>C</span> CAMERA <i /> <span>R</span> RESET</div><div className="desktop-controls"><div className="steer-pair"><button {...bindHold('left')}><ChevronLeft /></button><button {...bindHold('right')}><ChevronRight /></button></div><button className="pedal handbrake-pedal" {...bindHold('handbrake')}>HANDBRAKE</button><button className="pedal horn-pedal" {...bindHold('horn')}><Volume2 size={13} /> HORN</button><button className="pedal brake-pedal" {...bindHold('reverse')}>BRAKE<span>REVERSE</span></button><button className="pedal accel-pedal" {...bindHold('forward')}>ACCELERATE<ArrowUp size={14} /></button></div></div>
+    <div className="game-bottom"><div className="control-hint"><span>WASD</span> DRIVE <i /> <span>SPACE</span> HANDBRAKE <i /> <span>H</span> HORN <i /> <span>C</span> CAMERA <i /> <span>R</span> RESET</div><div className="desktop-controls"><div className="steer-pair"><button aria-label="Steer left" {...bindHold('left')}><ChevronLeft /></button><button aria-label="Steer right" {...bindHold('right')}><ChevronRight /></button></div><button className="pedal handbrake-pedal" {...bindHold('handbrake')}>HANDBRAKE</button><button className="pedal horn-pedal" {...bindHold('horn')}><Volume2 size={13} /> HORN</button><button className="pedal brake-pedal" {...bindHold('reverse')}>BRAKE<span>REVERSE</span></button><button className="pedal accel-pedal" {...bindHold('forward')}>ACCELERATE<ArrowUp size={14} /></button></div></div>
     {save.settings.wheel && <div className="steering-wheel" {...bindSteerWheel}><div>◉</div><small>STEER</small></div>}
     {warning && <motion.div className="collision-warning" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}><Shield size={15} /> {warning}</motion.div>}
     <AnimatePresence>{paused && <motion.div className="pause-scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="pause-panel" initial={{ scale: 0.94, y: 12 }} animate={{ scale: 1, y: 0 }}><div className="eyebrow"><span className="live-dot" /> {timeLeft === 0 && mode !== 'free' ? 'RUN COMPLETE' : 'DRIVE PAUSED'}</div><h2>{timeLeft === 0 && mode !== 'free' ? 'TIME’S UP' : 'TAKE A BREATHER.'}</h2><p>{timeLeft === 0 && mode !== 'free' ? 'The clock ran out. Give it another try or head back to the club.' : 'Your drive is paused. The city will be right here when you’re ready.'}</p>{!(timeLeft === 0 && mode !== 'free') && <button className="button-primary" onClick={() => setPaused(false)}><Play size={15} fill="currentColor" /> RESUME DRIVE</button>}<button className="button-secondary" onClick={onExit}><ArrowLeft size={15} /> EXIT TO CLUB</button>{timeLeft === 0 && mode !== 'free' && <button className="retry-button" onClick={() => onStart(mode)}><RotateCcw size={14} /> TRY AGAIN</button>}</motion.div></motion.div>}</AnimatePresence>
